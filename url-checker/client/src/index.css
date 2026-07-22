@@ -1,0 +1,7 @@
+.job-row-active td {
+  background: rgba(24, 144, 255, 0.12) !important;
+}
+
+.job-row-active:hover td {
+  background: rgba(24, 144, 255, 0.2) !important;
+}

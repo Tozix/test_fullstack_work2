@@ -1,0 +1,37 @@
+{
+  "name": "url-checker-server",
+  "version": "0.1.0",
+  "description": "URL Checker backend (NestJS + Zod, bun runtime)",
+  "private": true,
+  "scripts": {
+    "build": "nest build",
+    "start": "bun run src/main.ts",
+    "start:dev": "bun run --watch src/main.ts",
+    "start:prod": "bun run dist/main.js",
+    "test": "vitest run --config vitest.unit.config.ts",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/supertest": "^7.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "supertest": "^7.0.0",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10"
+  }
+}
