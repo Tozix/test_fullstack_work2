@@ -1,5 +1,5 @@
 {
-  "name": "url-checker-server",
+  "name": "url-checker-backend",
   "version": "0.1.0",
   "description": "URL Checker backend (NestJS + Zod, bun runtime)",
   "private": true,
