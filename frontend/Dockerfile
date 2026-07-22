@@ -10,10 +10,6 @@ COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts vitest.co
 COPY src ./src
 COPY public ./public
 
-# Empty baseURL means we use the nginx proxy via /api/*.
-ARG VITE_API_URL=/api
-ENV VITE_API_URL=${VITE_API_URL}
-
 RUN bun run build
 
 # ---- serve stage ----

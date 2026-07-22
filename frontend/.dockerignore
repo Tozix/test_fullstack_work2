@@ -5,7 +5,6 @@ coverage
 .gitignore
 .dockerignore
 Dockerfile
-nginx.conf
 *.log
 .env
 .env.*

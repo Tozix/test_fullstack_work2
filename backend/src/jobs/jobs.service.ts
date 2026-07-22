@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   ACTIVE_ITEM_STATUSES,
   Job,
+  JobRuntime,
   JobSummary,
   PagedJobs,
   TERMINAL_JOB_STATUSES,
@@ -22,19 +23,19 @@ export interface JobsServiceOptions {
 
 @Injectable()
 export class JobsService {
-  private readonly jobs = new Map<string, Job>();
+  private readonly jobs = new Map<string, JobRuntime>();
   private readonly postResponseDelayMs: number;
 
   constructor(options: JobsServiceOptions = {}) {
     this.postResponseDelayMs = options.postResponseDelayMs ?? POST_RESPONSE_DELAY_MS;
   }
 
-  create(urls: string[]): Job {
+  create(urls: string[]): JobRuntime {
     const items: UrlItem[] = urls.map((url) => ({
       url,
       status: 'pending',
     }));
-    const job: Job = {
+    const job: JobRuntime = {
       id: crypto.randomUUID(),
       createdAt: Date.now(),
       status: 'pending',
@@ -70,25 +71,26 @@ export class JobsService {
   findOne(id: string): Job {
     const job = this.jobs.get(id);
     if (!job) throw new NotFoundException(`Job ${id} not found`);
-    return job;
+    return toJobDto(job);
   }
 
   cancel(id: string): Job {
-    const job = this.findOne(id);
+    const job = this.jobs.get(id);
+    if (!job) throw new NotFoundException(`Job ${id} not found`);
     if (TERMINAL_JOB_STATUSES.has(job.status)) {
-      return job;
+      return toJobDto(job);
     }
-    job.abort?.abort();
+    job.abort.abort();
     for (const item of job.items) {
       if (ACTIVE_ITEM_STATUSES.has(item.status)) {
         item.status = 'cancelled';
       }
     }
     job.status = 'cancelled';
-    return job;
+    return toJobDto(job);
   }
 
-  private async processJob(job: Job, sem: Semaphore): Promise<void> {
+  private async processJob(job: JobRuntime, sem: Semaphore): Promise<void> {
     if (job.items.length === 0) {
       job.status = 'completed';
       return;
@@ -98,14 +100,14 @@ export class JobsService {
     this.finalize(job);
   }
 
-  private async runOne(job: Job, item: UrlItem, sem: Semaphore): Promise<void> {
-    if (job.abort?.signal.aborted) {
+  private async runOne(job: JobRuntime, item: UrlItem, sem: Semaphore): Promise<void> {
+    if (job.abort.signal.aborted) {
       item.status = 'cancelled';
       return;
     }
     const release = await sem.acquire();
     try {
-      if (job.abort?.signal.aborted) {
+      if (job.abort.signal.aborted) {
         item.status = 'cancelled';
         return;
       }
@@ -114,12 +116,12 @@ export class JobsService {
 
       const ac = new AbortController();
       const onJobAbort = () => ac.abort();
-      job.abort?.signal.addEventListener('abort', onJobAbort, { once: true });
+      job.abort.signal.addEventListener('abort', onJobAbort, { once: true });
       const timeout = setTimeout(() => ac.abort(), TIMEOUT_MS);
 
       try {
         const result = await this.probe(item.url, ac.signal, 0);
-        if (job.abort?.signal.aborted) {
+        if (job.abort.signal.aborted) {
           item.status = 'cancelled';
           return;
         }
@@ -128,7 +130,7 @@ export class JobsService {
         item.status = 'success';
         job.successCount += 1;
       } catch (err) {
-        if (job.abort?.signal.aborted) {
+        if (job.abort.signal.aborted) {
           item.status = 'cancelled';
         } else {
           const message = err instanceof Error ? err.message : 'Unknown error';
@@ -138,7 +140,7 @@ export class JobsService {
         }
       } finally {
         clearTimeout(timeout);
-        job.abort?.signal.removeEventListener('abort', onJobAbort);
+        job.abort.signal.removeEventListener('abort', onJobAbort);
         item.endTime = Date.now();
         if (item.startTime != null && item.endTime != null) {
           item.duration = item.endTime - item.startTime;
@@ -205,6 +207,11 @@ function toSummary(job: Job): JobSummary {
     totalUrls: job.items.length,
     hasTlsError,
   };
+}
+
+function toJobDto(job: JobRuntime): Job {
+  const { abort: _abort, ...rest } = job;
+  return rest;
 }
 
 const TLS_PATTERNS: ReadonlyArray<string> = [

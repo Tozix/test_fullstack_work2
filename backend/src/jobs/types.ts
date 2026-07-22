@@ -38,10 +38,13 @@ export interface Job {
   items: UrlItem[];
   successCount: number;
   errorCount: number;
-  abort?: AbortController;
 }
 
-export type JobSummary = Omit<Job, 'items' | 'abort'> & {
+export interface JobRuntime extends Job {
+  abort: AbortController;
+}
+
+export type JobSummary = Omit<Job, 'items'> & {
   totalUrls: number;
   hasTlsError: boolean;
 };
