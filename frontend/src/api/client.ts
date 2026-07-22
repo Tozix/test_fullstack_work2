@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Job, JobSummary, PagedJobs } from '../types';
+import type { Job, PagedJobs } from '../types';
 
 const baseURL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? '';
@@ -35,5 +35,3 @@ export async function cancelJob(id: string): Promise<Job> {
   const res = await http.delete<Job>(`/api/jobs/${id}`);
   return res.data;
 }
-
-export type { Job, JobSummary };

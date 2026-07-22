@@ -56,61 +56,39 @@ export interface JobStoreState {
   mergeJobSummary(job: Job): void;
 }
 
-interface InternalActions {
-  _syncPolling(): void;
-  _stopAllTimers(): void;
-}
+export const useJobStore = create<JobStoreState>((set, get) => {
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-export const useJobStore = create<JobStoreState & InternalActions>((set, get) => {
-  const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
-
-  const stopTimerFor = (id: string) => {
-    const t = pollTimers.get(id);
-    if (t) {
-      clearInterval(t);
-      pollTimers.delete(id);
+  const stopPolling = () => {
+    if (pollTimer !== null) {
+      clearInterval(pollTimer);
+      pollTimer = null;
     }
   };
 
-  const stopAllTimers = () => {
-    for (const id of [...pollTimers.keys()]) stopTimerFor(id);
-  };
-
-  const ensureTimer = (id: string) => {
-    if (pollTimers.has(id)) return;
-    const timer = setInterval(() => {
-      const summary = get().jobs.find((j) => j.id === id);
-      if (!summary || isTerminalStatus(summary.status)) {
-        stopTimerFor(id);
+  const startPolling = (id: string) => {
+    stopPolling();
+    pollTimer = setInterval(() => {
+      if (get().activeJobId !== id) {
+        stopPolling();
+        return;
+      }
+      const details = get().activeJobDetails;
+      if (details && isTerminalStatus(details.status)) {
+        stopPolling();
         return;
       }
       void get().fetchJobDetails(id);
     }, POLL_INTERVAL_MS);
-    pollTimers.set(id, timer);
   };
 
-  const syncPolling = () => {
-    const { jobs, activeJobDetails } = get();
-    const liveIds = new Set<string>();
-    for (const j of jobs) {
-      if (!isTerminalStatus(j.status)) liveIds.add(j.id);
+  const activateJob = (id: string) => {
+    set({ activeJobId: id, activeJobDetails: null });
+    const summary = get().jobs.find((j) => j.id === id);
+    if (!isTerminalStatus(summary?.status)) {
+      startPolling(id);
     }
-    if (
-      activeJobDetails &&
-      activeJobDetails.id &&
-      !isTerminalStatus(activeJobDetails.status)
-    ) {
-      liveIds.add(activeJobDetails.id);
-    }
-
-    for (const id of pollTimers.keys()) {
-      if (!liveIds.has(id)) stopTimerFor(id);
-    }
-    for (const id of liveIds) ensureTimer(id);
-  };
-
-  const touchPolling = () => {
-    queueMicrotask(syncPolling);
+    void get().fetchJobDetails(id);
   };
 
   return {
@@ -139,7 +117,6 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
       try {
         const res = await fetchJobs({ page, limit, sortBy, sortOrder });
         set({ jobs: res.data, total: res.meta.total, loadingList: false });
-        touchPolling();
       } catch (e) {
         set({ loadingList: false, error: extractApiErrorMessage(e, 'Не удалось загрузить список заданий') });
       }
@@ -148,24 +125,27 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
     async createJob(urls) {
       set({ error: null });
       const jobId = await apiCreateJob(urls);
+      stopPolling();
       set({ activeJobId: jobId, activeJobDetails: null });
       void get().fetchJobs();
       void get().fetchJobDetails(jobId);
+      startPolling(jobId);
       return jobId;
     },
 
     setActiveJob(id) {
       if (id === null) {
+        stopPolling();
         set({ activeJobId: null, activeJobDetails: null });
         return;
       }
       if (id === get().activeJobId) return;
-      set({ activeJobId: id, activeJobDetails: null });
-      touchPolling();
-      void get().fetchJobDetails(id);
+      stopPolling();
+      activateJob(id);
     },
 
     clearActiveJob() {
+      stopPolling();
       set({ activeJobId: null, activeJobDetails: null });
     },
 
@@ -180,7 +160,7 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
         }
         get().mergeJobSummary(job);
         if (isTerminalStatus(job.status)) {
-          stopTimerFor(id);
+          stopPolling();
         }
         return job;
       } catch (e) {
@@ -188,7 +168,7 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
           loadingDetail: false,
           error: extractApiErrorMessage(e, 'Не удалось загрузить детали задания'),
         });
-        stopTimerFor(id);
+        stopPolling();
         return null;
       }
     },
@@ -205,10 +185,6 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
         }
         return { jobs: next, total: Math.max(state.total, next.length) };
       });
-      if (isTerminalStatus(summary.status)) {
-        stopTimerFor(summary.id);
-      }
-      touchPolling();
     },
 
     async cancelActiveJob() {
@@ -217,7 +193,7 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
       try {
         const job = await apiCancelJob(id);
         set({ activeJobDetails: job });
-        stopTimerFor(id);
+        stopPolling();
         get().mergeJobSummary(job);
         void get().fetchJobs();
         return job;
@@ -226,14 +202,5 @@ export const useJobStore = create<JobStoreState & InternalActions>((set, get) =>
         return null;
       }
     },
-
-    _syncPolling: syncPolling,
-    _stopAllTimers: stopAllTimers,
   };
 });
-
-if (typeof window !== 'undefined') {
-  (window as unknown as { __clearJobStoreTimers?: () => void }).__clearJobStoreTimers = () => {
-    useJobStore.getState()._stopAllTimers();
-  };
-}

@@ -65,15 +65,13 @@ export function JobCreateForm() {
         ) : null
       }
     >
-      <Space.Compact style={{ width: '100%', display: 'block' }}>
-        <Input.TextArea
-          rows={6}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={`Введите URL, по одному на строку (до 500):\nhttps://example.com\nhttps://example.org\n\nИли нажмите «Шаблон», чтобы вставить ${DEMO_URLS.length} демо-адресов.`}
-          data-testid="urls-input"
-        />
-      </Space.Compact>
+      <Input.TextArea
+        rows={6}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={`Введите URL, по одному на строку (до 500):\nhttps://example.com\nhttps://example.org\n\nИли нажмите «Шаблон», чтобы вставить ${DEMO_URLS.length} демо-адресов.`}
+        data-testid="urls-input"
+      />
       <Space style={{ marginTop: 12 }}>
         <Button
           icon={<SnippetsOutlined />}

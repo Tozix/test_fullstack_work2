@@ -10,7 +10,7 @@ import {
 import { Semaphore, sleep } from './utils/semaphore';
 import { PaginationInput } from './schema';
 
-const MAX_GLOBAL_CONCURRENCY = 5;
+const MAX_CONCURRENCY = 5;
 const TIMEOUT_MS = 10_000;
 const MAX_REDIRECTS = 5;
 const POST_RESPONSE_DELAY_MS = 10_000;
@@ -23,7 +23,6 @@ export interface JobsServiceOptions {
 @Injectable()
 export class JobsService {
   private readonly jobs = new Map<string, Job>();
-  private readonly sem = new Semaphore(MAX_GLOBAL_CONCURRENCY);
   private readonly postResponseDelayMs: number;
 
   constructor(options: JobsServiceOptions = {}) {
@@ -45,8 +44,9 @@ export class JobsService {
       abort: new AbortController(),
     };
     this.jobs.set(job.id, job);
+    const sem = new Semaphore(MAX_CONCURRENCY);
     queueMicrotask(() => {
-      void this.processJob(job).catch(() => undefined);
+      void this.processJob(job, sem).catch(() => undefined);
     });
     return job;
   }
@@ -88,22 +88,22 @@ export class JobsService {
     return job;
   }
 
-  private async processJob(job: Job): Promise<void> {
+  private async processJob(job: Job, sem: Semaphore): Promise<void> {
     if (job.items.length === 0) {
       job.status = 'completed';
       return;
     }
     job.status = 'in_progress';
-    await Promise.all(job.items.map((item) => this.runOne(job, item)));
+    await Promise.all(job.items.map((item) => this.runOne(job, item, sem)));
     this.finalize(job);
   }
 
-  private async runOne(job: Job, item: UrlItem): Promise<void> {
+  private async runOne(job: Job, item: UrlItem, sem: Semaphore): Promise<void> {
     if (job.abort?.signal.aborted) {
       item.status = 'cancelled';
       return;
     }
-    const release = await this.sem.acquire();
+    const release = await sem.acquire();
     try {
       if (job.abort?.signal.aborted) {
         item.status = 'cancelled';
